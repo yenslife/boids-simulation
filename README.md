@@ -4,6 +4,8 @@ This is a learning project.
 
 This project is a Python-based simulation inspired by the Boids algorithm, which models the flocking behavior of birds. The simulation is built using the Pygame library and features interactive elements that allow you to experiment with the Boids' world.
 
+![Boids Simulation Demo](demo.gif)
+
 ## Features
 
 *   Boids Flocking: Witness the mesmerizing emergent behavior of flocking creatures.
