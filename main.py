@@ -36,7 +36,7 @@ PREDATOR_EAT_DISTANCE = 7
 
 # 環境參數
 OBSTACLE_COLOR = (120, 120, 120)
-OBSTACLE_RADIUS = 30
+OBSTACLE_RADIUS = 20
 
 # UI 介面參數
 FONT_SIZE = 20
@@ -48,12 +48,12 @@ INPUT_BOX_ACTIVE_COLOR = (150, 150, 180)
 
 
 PREDATOR_BUTTON_RECT = pygame.Rect(10, 10, 180, 40)
-# 將舊的 add/remove 按鈕重新定位
 ADD_BOID_BUTTON_RECT = pygame.Rect(200, 10, 140, 40)
 REMOVE_BOID_BUTTON_RECT = pygame.Rect(350, 10, 140, 40)
 EAT_MODE_BUTTON_RECT = pygame.Rect(500, 10, 180, 40)
 OBSTACLE_MODE_BUTTON_RECT = pygame.Rect(690, 10, 220, 40)
-TOGGLE_UI_BUTTON_RECT = pygame.Rect(SCREEN_WIDTH - 160, 10, 150, 40)
+CONTINUOUS_PLACEMENT_BUTTON_RECT = pygame.Rect(920, 10, 200, 40)
+TOGGLE_UI_BUTTON_RECT = pygame.Rect(SCREEN_WIDTH - 150, 10, 140, 40)
 
 # 新增輸入框和其確認按鈕
 INPUT_BOX_RECT = pygame.Rect(200, 60, 140, 40)
@@ -282,6 +282,7 @@ def main():
     predator_can_eat = False
     mouse_mode = "add_obstacle"
     ui_visible = True
+    continuous_obstacle_placement = False
 
     # 新增給輸入框的變數
     input_text = "10"
@@ -306,6 +307,25 @@ def main():
         mouse_pos = pygame.mouse.get_pos()
         clicked_on_ui = False
 
+        # 檢查是否有任何 UI 元素被懸停
+        ui_hovered = False
+        if ui_visible:
+            all_buttons = [
+                PREDATOR_BUTTON_RECT,
+                ADD_BOID_BUTTON_RECT,
+                REMOVE_BOID_BUTTON_RECT,
+                EAT_MODE_BUTTON_RECT,
+                OBSTACLE_MODE_BUTTON_RECT,
+                CONTINUOUS_PLACEMENT_BUTTON_RECT,
+                TOGGLE_UI_BUTTON_RECT,
+                INPUT_BOX_RECT,
+                ADD_N_BOIDS_BUTTON_RECT,
+            ]
+            for button in all_buttons:
+                if button.collidepoint(mouse_pos):
+                    ui_hovered = True
+                    break
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
@@ -319,7 +339,6 @@ def main():
                         input_text = "10"  # Reset
                     elif event.key == pygame.K_BACKSPACE:
                         input_text = input_text[:-1]
-                    # 允許負號作為第一個字元
                     elif event.unicode == "-" and len(input_text) == 0:
                         input_text += event.unicode
                     elif event.unicode.isdigit():
@@ -332,16 +351,15 @@ def main():
                         clicked_on_ui = True
 
                     if ui_visible:
-                        # 檢查是否點擊 UI
                         if PREDATOR_BUTTON_RECT.collidepoint(mouse_pos):
                             predator_active = not predator_active
                             clicked_on_ui = True
                         elif ADD_BOID_BUTTON_RECT.collidepoint(mouse_pos):
-                            boids.append(Boid())  # 維持原本的單次增加功能
+                            boids.append(Boid())
                             clicked_on_ui = True
                         elif REMOVE_BOID_BUTTON_RECT.collidepoint(mouse_pos):
                             if boids:
-                                boids.pop(0)  # 移除最舊的
+                                boids.pop(0)
                             clicked_on_ui = True
                         elif EAT_MODE_BUTTON_RECT.collidepoint(mouse_pos):
                             predator_can_eat = not predator_can_eat
@@ -353,9 +371,12 @@ def main():
                                 else "add_obstacle"
                             )
                             clicked_on_ui = True
-
-                        # 新增的 UI 元素事件
-                        if INPUT_BOX_RECT.collidepoint(mouse_pos):
+                        elif CONTINUOUS_PLACEMENT_BUTTON_RECT.collidepoint(mouse_pos):
+                            continuous_obstacle_placement = (
+                                not continuous_obstacle_placement
+                            )
+                            clicked_on_ui = True
+                        elif INPUT_BOX_RECT.collidepoint(mouse_pos):
                             input_active = True
                             clicked_on_ui = True
                         else:
@@ -365,7 +386,7 @@ def main():
                             handle_boid_count_change(input_text)
                             clicked_on_ui = True
 
-                    if not clicked_on_ui:
+                    if not clicked_on_ui and not continuous_obstacle_placement:
                         if mouse_mode == "add_obstacle":
                             obstacles.append(
                                 {
@@ -384,6 +405,25 @@ def main():
                                     obstacles.remove(obs)
                                     break
 
+        # --- 連續滑鼠操作 (新增/移除) ---
+        mouse_pressed = pygame.mouse.get_pressed()
+        if mouse_pressed[0] and continuous_obstacle_placement and not ui_hovered:
+            if mouse_mode == "add_obstacle":
+                obstacles.append(
+                    {
+                        "center": pygame.math.Vector2(mouse_pos),
+                        "radius": OBSTACLE_RADIUS,
+                    }
+                )
+            elif mouse_mode == "remove_obstacle":
+                for obs in obstacles[:]:
+                    if (
+                        pygame.math.Vector2(mouse_pos).distance_to(obs["center"])
+                        < obs["radius"]
+                    ):
+                        obstacles.remove(obs)
+                        break  # 每幀只移除一個以獲得更好的控制
+
         if predator_active and not predators:
             predators.append(Predator())
         elif not predator_active and predators:
@@ -393,7 +433,6 @@ def main():
         for p in predators:
             p.can_eat = predator_can_eat
 
-        # --- 更新與移除 ---
         boids_to_remove = set()
         all_entities = boids + predators
         for entity in all_entities:
@@ -405,35 +444,18 @@ def main():
         if boids_to_remove:
             boids = [boid for boid in boids if boid not in boids_to_remove]
 
-        # --- 繪圖 ---
         screen.fill((10, 20, 40))
 
         for obs in obstacles:
             pygame.draw.circle(screen, OBSTACLE_COLOR, obs["center"], obs["radius"])
 
-        # Re-calculate all_entities for drawing after potential removals
         all_entities = boids + predators
         for entity in all_entities:
             entity.draw(screen)
 
         # --- 繪製 UI ---
-        # 切換 UI 可見性按鈕
-        toggle_ui_button_color = (
-            BUTTON_HOVER_COLOR
-            if TOGGLE_UI_BUTTON_RECT.collidepoint(mouse_pos)
-            else BUTTON_COLOR
-        )
-        pygame.draw.rect(
-            screen, toggle_ui_button_color, TOGGLE_UI_BUTTON_RECT, border_radius=5
-        )
-        toggle_ui_text_str = "Hide UI" if ui_visible else "Show UI"
-        toggle_ui_text = font.render(toggle_ui_text_str, True, BUTTON_TEXT_COLOR)
-        screen.blit(
-            toggle_ui_text,
-            toggle_ui_text.get_rect(center=TOGGLE_UI_BUTTON_RECT.center),
-        )
-
         if ui_visible:
+            # ... (所有按鈕的繪製邏輯)
             # 捕食者按鈕
             pred_button_color = (
                 BUTTON_HOVER_COLOR
@@ -516,7 +538,34 @@ def main():
                 obstacle_text.get_rect(center=OBSTACLE_MODE_BUTTON_RECT.center),
             )
 
-            # 新增的輸入框和按鈕
+            # 連續放置模式按鈕
+            continuous_button_color = (
+                BUTTON_HOVER_COLOR
+                if CONTINUOUS_PLACEMENT_BUTTON_RECT.collidepoint(mouse_pos)
+                else BUTTON_COLOR
+            )
+            pygame.draw.rect(
+                screen,
+                continuous_button_color,
+                CONTINUOUS_PLACEMENT_BUTTON_RECT,
+                border_radius=5,
+            )
+            continuous_text_str = (
+                "Place: Continuous"
+                if continuous_obstacle_placement
+                else "Place: Single"
+            )
+            continuous_text = font.render(
+                continuous_text_str, True, BUTTON_TEXT_COLOR
+            )
+            screen.blit(
+                continuous_text,
+                continuous_text.get_rect(
+                    center=CONTINUOUS_PLACEMENT_BUTTON_RECT.center
+                ),
+            )
+
+            # 輸入框和相關按鈕
             input_box_color = (
                 INPUT_BOX_ACTIVE_COLOR if input_active else INPUT_BOX_COLOR
             )
@@ -536,22 +585,34 @@ def main():
             pygame.draw.rect(
                 screen, add_n_button_color, ADD_N_BOIDS_BUTTON_RECT, border_radius=5
             )
-
-            # 動態決定按鈕文字
             try:
                 num = int(input_text)
-                if num < 0:
-                    button_str = f"Remove {abs(num)} Boids"
-                else:
-                    button_str = f"Add {num} Boids"
+                button_str = (
+                    f"Remove {abs(num)} Boids" if num < 0 else f"Add {num} Boids"
+                )
             except ValueError:
                 button_str = "Execute"
-
             add_n_text = font.render(button_str, True, BUTTON_TEXT_COLOR)
             screen.blit(
                 add_n_text,
                 add_n_text.get_rect(center=ADD_N_BOIDS_BUTTON_RECT.center),
             )
+
+        # 切換 UI 可見性按鈕 (移到最上層繪製)
+        toggle_ui_button_color = (
+            BUTTON_HOVER_COLOR
+            if TOGGLE_UI_BUTTON_RECT.collidepoint(mouse_pos)
+            else BUTTON_COLOR
+        )
+        pygame.draw.rect(
+            screen, toggle_ui_button_color, TOGGLE_UI_BUTTON_RECT, border_radius=5
+        )
+        toggle_ui_text_str = "Hide UI" if ui_visible else "Show UI"
+        toggle_ui_text = font.render(toggle_ui_text_str, True, BUTTON_TEXT_COLOR)
+        screen.blit(
+            toggle_ui_text,
+            toggle_ui_text.get_rect(center=TOGGLE_UI_BUTTON_RECT.center),
+        )
 
         pygame.display.flip()
         clock.tick(60)
