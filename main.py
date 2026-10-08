@@ -268,8 +268,10 @@ class Predator(Boid):
 
 # --- 主程式 ---
 def main():
+    global SCREEN_WIDTH, SCREEN_HEIGHT
+
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("Boids Simulation - Interactive World Builder")
     clock = pygame.time.Clock()
     font = pygame.font.Font(None, FONT_SIZE)
@@ -329,6 +331,15 @@ def main():
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
+
+            # 視窗大小改變時，更新邊界並把超出範圍的個體拉回畫面內
+            if event.type == pygame.VIDEORESIZE:
+                SCREEN_WIDTH, SCREEN_HEIGHT = event.w, event.h
+                screen = pygame.display.get_surface()
+                TOGGLE_UI_BUTTON_RECT.x = SCREEN_WIDTH - 150
+                for entity in boids + predators:
+                    entity.position.x = min(max(entity.position.x, 0), SCREEN_WIDTH)
+                    entity.position.y = min(max(entity.position.y, 0), SCREEN_HEIGHT)
 
             if event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
